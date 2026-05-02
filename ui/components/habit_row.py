@@ -235,7 +235,7 @@ class HabitRow(QFrame):
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
         self.anim.start()
         
-        self.progress.setFormat(f"{percent}% | 🔥 Streak: {streak} | 🎯 Reps: {total_reps}")
+        self.progress.setFormat(f"{percent}% |  Streak: {streak} |  Reps: {total_reps}")
         self.progress.setStyleSheet("""
             QProgressBar {
                 background-color: #282a36;
