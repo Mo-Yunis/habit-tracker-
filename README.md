@@ -14,6 +14,11 @@ Get the ready-to-use application for your system:
 
 ---
 
+## 🎬 Demo
+<video src="assets/demo_fast.mp4" controls width="100%"></video>
+
+---
+
 ## 🌟 Overview
 **Habit Tracker** is a sleek, modern, and powerful desktop application designed to help you stay on top of your daily routines and long-term goals. Built with **Python** and **PyQt5**, it features a beautiful **Liquid Glass** interface that makes tracking habits an enjoyable experience.
 
