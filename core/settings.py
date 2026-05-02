@@ -4,8 +4,11 @@ import os
 SETTINGS_FILE = "settings.json"
 
 DEFAULT_SETTINGS = {
-    "theme": "Dracula",
-    "graph_type": "Horizontal Bar"
+    "theme":         "Dracula",
+    "graph_type":    "Horizontal Bar",
+    "start_of_week": "Monday",
+    "show_streaks":  True,
+    "compact_mode":  False,
 }
 
 def load_settings():
@@ -13,11 +16,10 @@ def load_settings():
         try:
             with open(SETTINGS_FILE, "r") as f:
                 settings = json.load(f)
-                # merge with defaults
-                for k, v in DEFAULT_SETTINGS.items():
-                    if k not in settings:
-                        settings[k] = v
-                return settings
+            for k, v in DEFAULT_SETTINGS.items():
+                if k not in settings:
+                    settings[k] = v
+            return settings
         except Exception:
             return DEFAULT_SETTINGS.copy()
     return DEFAULT_SETTINGS.copy()

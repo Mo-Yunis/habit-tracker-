@@ -35,12 +35,17 @@ class DashboardPage(QWidget):
         header.addStretch()
 
         self.view_mode_combo = QComboBox()
-        self.view_mode_combo.addItems(["Today", "Entire Month"])
-        self.view_mode_combo.currentTextChanged.connect(self.reload)
-        self.view_mode_combo.setStyleSheet("padding: 8px; font-size: 14px; font-weight: bold;")
-
         self.month_box = QComboBox()
         self.year_box = QComboBox()
+
+        from PyQt5.QtWidgets import QListView
+        for cb in [self.view_mode_combo, self.month_box, self.year_box]:
+            cb.setView(QListView())
+
+        self.view_mode_combo.addItems(["Today", "Entire Month"])
+        self.view_mode_combo.currentTextChanged.connect(self.reload)
+        self.view_mode_combo.setFixedHeight(38)
+
         for i in range(1, 13):
             self.month_box.addItem(datetime(2000, i, 1).strftime('%B'), str(i))
         for y in range(2020, 2035):

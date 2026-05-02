@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QFrame, QStackedWidget, QSplitter
+    QLabel, QFrame, QStackedWidget, QSplitter, QSizePolicy
 )
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QPen, QColor
+from PyQt5.QtWidgets import QGraphicsOpacityEffect
 from datetime import datetime
 
 from core.database import add_habit
@@ -13,179 +14,305 @@ from ui.pages.settings import SettingsPage
 from ui.components.add_habit_form import AddHabitForm
 
 
+# ── Icon factory ───────────────────────────────────────────────────────────
+
+def create_icon(icon_type: str, color: str = "#9499C3") -> QIcon:
+    pix = QPixmap(64, 64)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(QColor(color))
+    pen.setWidth(5)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    p.setPen(pen)
+
+    if icon_type == "menu":
+        p.drawLine(12, 18, 52, 18)
+        p.drawLine(12, 32, 52, 32)
+        p.drawLine(12, 46, 52, 46)
+    elif icon_type == "dashboard":
+        p.drawRect(12, 35, 10, 15)
+        p.drawRect(27, 20, 10, 30)
+        p.drawRect(42, 30, 10, 20)
+    elif icon_type == "history":
+        p.drawEllipse(12, 12, 40, 40)
+        p.drawLine(32, 32, 32, 22)
+        p.drawLine(32, 32, 42, 32)
+    elif icon_type == "settings":
+        p.drawEllipse(22, 22, 20, 20)
+        for i in range(8):
+            p.save()
+            p.translate(32, 32)
+            p.rotate(i * 45)
+            p.drawLine(0, -22, 0, -28)
+            p.restore()
+    elif icon_type == "plus":
+        p.drawLine(32, 12, 32, 52)
+        p.drawLine(12, 32, 52, 32)
+    elif icon_type in ("delete", "close"):
+        p.drawLine(16, 16, 48, 48)
+        p.drawLine(48, 16, 16, 48)
+
+    p.end()
+    return QIcon(pix)
+
+
+# ── NavButton ──────────────────────────────────────────────────────────────
+
+class _NavButton(QPushButton):
+    def __init__(self, label: str, icon_type: str, color: str):
+        super().__init__(f"  {label}")
+        self.icon_type = icon_type
+        self.setIcon(create_icon(icon_type, color))
+        self.setFixedHeight(44)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setIconSize(QPixmap(22, 22).size())
+
+    def set_active(self, active: bool, accent: str, text_main: str):
+        if active:
+            self.setIcon(create_icon(self.icon_type, accent))
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background: rgba(189,147,249,0.12);
+                    color: {accent};
+                    text-align: left;
+                    padding-left: 14px;
+                    border-left: 3px solid {accent};
+                    border-radius: 0px 12px 12px 0px;
+                    font-weight: 800;
+                    font-size: 13px;
+                    border-top: none; border-right: none; border-bottom: none;
+                }}
+            """)
+        else:
+            self.setIcon(create_icon(self.icon_type, text_main))
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {text_main};
+                    text-align: left;
+                    padding-left: 17px;
+                    border: none;
+                    border-radius: 12px;
+                    font-weight: 500;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background: rgba(148,153,195,0.10);
+                    color: {accent};
+                }}
+            """)
+
+
+# ── MainWindow ─────────────────────────────────────────────────────────────
+
 class MainWindow(QWidget):
     def __init__(self, app, settings, theme_colors):
         super().__init__()
-        self.app = app
-        self.settings = settings
+        self.app          = app
+        self.settings     = settings
         self.theme_colors = theme_colors
 
-        self.setWindowTitle("🔥Habit Tracker")
+        self.setWindowTitle("🔥 Habit Tracker")
         self.setWindowIcon(QIcon("assets/icon.png"))
-        self.resize(1200, 800)
+        self.resize(1280, 820)
 
-        self.init_ui()
+        self._init_ui()
 
-    def init_ui(self):
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+    # ── build UI ───────────────────────────────────────────────────────────
+
+    def _init_ui(self):
+        root = QHBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(12)
 
         self.splitter = QSplitter(Qt.Horizontal)
-        
-        # --- LEFT SIDEBAR ---
+        self.splitter.setHandleWidth(1)
+
+        # ── SIDEBAR ────────────────────────────────────────────────────────
         self.sidebar = QFrame()
         self.sidebar.setObjectName("Sidebar")
-        self.sidebar.setMinimumWidth(250)
-        self.sidebar.setMaximumWidth(350)
-        self.update_sidebar_style()
-        
-        sidebar_layout = QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(20, 30, 20, 30)
-        sidebar_layout.setSpacing(15)
-        
-        nav_label = QLabel("NAVIGATION")
-        nav_label.setStyleSheet(f"color: {self.theme_colors.get('text_muted')}; font-weight: bold;")
-        sidebar_layout.addWidget(nav_label)
-        
-        self.btn_dashboard = QPushButton("📊 Dashboard")
-        self.btn_history = QPushButton("⏳ History")
-        self.btn_settings = QPushButton("⚙️ Settings")
-        
-        self.update_nav_buttons_style()
-            
-        for btn in [self.btn_dashboard, self.btn_history, self.btn_settings]:
-            sidebar_layout.addWidget(btn)
-            
-        self.btn_dashboard.clicked.connect(lambda: self.switch_page(0))
-        self.btn_history.clicked.connect(lambda: self.switch_page(1))
-        self.btn_settings.clicked.connect(lambda: self.switch_page(2))
+        self.sidebar.setFixedWidth(272)
 
-        sidebar_layout.addSpacing(30)
+        sb_lay = QVBoxLayout(self.sidebar)
+        sb_lay.setContentsMargins(14, 18, 14, 18)
+        sb_lay.setSpacing(8)
 
-        # Form in sidebar
-        self.add_habit_form = AddHabitForm(self.theme_colors)
-        self.add_habit_form.habit_added.connect(self.on_habit_added)
-        sidebar_layout.addWidget(self.add_habit_form)
-        
-        sidebar_layout.addStretch()
+        # Logo row
+        logo_row = QHBoxLayout()
+        logo = QLabel("🔥 HABIT")
+        logo.setStyleSheet(
+            f"color: {self.theme_colors.get('accent','#BD93F9')}; "
+            "font-size: 22px; font-weight: 900; letter-spacing: 2px;"
+        )
+        self._btn_toggle = QPushButton()
+        self._btn_toggle.setIcon(create_icon("menu", self.theme_colors.get("text_muted", "#9499C3")))
+        self._btn_toggle.setFixedSize(32, 32)
+        self._btn_toggle.setCursor(Qt.PointingHandCursor)
+        self._btn_toggle.setStyleSheet("background: transparent; border: none;")
+        self._btn_toggle.clicked.connect(self._toggle_sidebar)
+        logo_row.addWidget(logo)
+        logo_row.addStretch()
+        logo_row.addWidget(self._btn_toggle)
+        sb_lay.addLayout(logo_row)
+        sb_lay.addSpacing(16)
 
-        footer_label = QLabel("تم التطوير بواسطه يونس\nلاتنسوا والدتي من دعائكم",)
-        footer_label.setAlignment(Qt.AlignCenter)
-        footer_label.setStyleSheet(f"color: {self.theme_colors.get('text_muted')}; font-size: 14px;")
-        sidebar_layout.addWidget(footer_label)
+        # Nav section label
+        nav_lbl = QLabel("NAVIGATION")
+        nav_lbl.setStyleSheet(
+            "color: #9499C3; font-size: 9px; font-weight: 800; "
+            "letter-spacing: 1.8px; background: transparent;"
+        )
+        sb_lay.addWidget(nav_lbl)
+        sb_lay.addSpacing(4)
+
+        # Nav buttons
+        self._nav_btns = [
+            _NavButton("Dashboard", "dashboard", self.theme_colors.get("text_main", "#F8F8F2")),
+            _NavButton("History",   "history",   self.theme_colors.get("text_main", "#F8F8F2")),
+            _NavButton("Settings",  "settings",  self.theme_colors.get("text_main", "#F8F8F2")),
+        ]
+        for i, btn in enumerate(self._nav_btns):
+            btn.clicked.connect(lambda _, idx=i: self._switch_page(idx))
+            sb_lay.addWidget(btn)
+
+        sb_lay.addSpacing(24)
+
+        # Divider
+        div = QFrame()
+        div.setFrameShape(QFrame.HLine)
+        div.setStyleSheet(
+            "background: rgba(148,153,195,0.18); border: none; max-height: 1px;"
+        )
+        sb_lay.addWidget(div)
+        sb_lay.addSpacing(8)
+
+        # Create new label
+        create_lbl = QLabel("CREATE NEW")
+        create_lbl.setStyleSheet(
+            "color: #9499C3; font-size: 9px; font-weight: 800; "
+            "letter-spacing: 1.8px; background: transparent;"
+        )
+        sb_lay.addWidget(create_lbl)
+
+        self.add_form = AddHabitForm(self.theme_colors)
+        self.add_form.habit_added.connect(self._on_habit_added)
+        sb_lay.addWidget(self.add_form)
+
+        sb_lay.addStretch()
+
+        # Footer
+        footer = QLabel("Built by Yunis  •  لا تنسوا والدتي من دعائكم 🤍")
+        footer.setAlignment(Qt.AlignCenter)
+        footer.setWordWrap(True)
+        footer.setStyleSheet(
+            "color: #9499C3; font-size: 10px; font-weight: 500; background: transparent;"
+        )
+        sb_lay.addWidget(footer)
 
         self.splitter.addWidget(self.sidebar)
 
-        # --- RIGHT MAIN AREA ---
+        # ── MAIN AREA ──────────────────────────────────────────────────────
         self.main_area = QFrame()
-        main_area_layout = QVBoxLayout(self.main_area)
-        main_area_layout.setContentsMargins(30, 30, 30, 30)
+        self.main_area.setStyleSheet("background: transparent;")
+        ma_lay = QVBoxLayout(self.main_area)
+        ma_lay.setContentsMargins(16, 8, 16, 16)
+        ma_lay.setSpacing(16)
 
-        # Top Bar for Toggle Sidebar
+        # Top bar
         top_bar = QHBoxLayout()
-        self.btn_toggle_sidebar = QPushButton("☰")
-        self.btn_toggle_sidebar.setObjectName("ToggleSidebar")
-        self.btn_toggle_sidebar.setFixedSize(40, 40)
-        self.btn_toggle_sidebar.clicked.connect(self.toggle_sidebar)
-        top_bar.addWidget(self.btn_toggle_sidebar)
-        top_bar.addStretch()
-        main_area_layout.addLayout(top_bar)
+        self._btn_open_sidebar = QPushButton()
+        self._btn_open_sidebar.setIcon(
+            create_icon("menu", self.theme_colors.get("accent", "#BD93F9"))
+        )
+        self._btn_open_sidebar.setFixedSize(38, 38)
+        self._btn_open_sidebar.setCursor(Qt.PointingHandCursor)
+        self._btn_open_sidebar.setStyleSheet("background: transparent; border: none;")
+        self._btn_open_sidebar.clicked.connect(self._toggle_sidebar)
+        self._btn_open_sidebar.hide()
 
-        self.stacked_widget = QStackedWidget()
-        
-        # Initialize Pages
+        self.page_title = QLabel("Dashboard")
+        self.page_title.setStyleSheet(
+            "font-size: 24px; font-weight: 800; margin-left: 6px; background: transparent;"
+        )
+
+        # Date badge
+        date_badge = QLabel(datetime.now().strftime("  %A, %d %B %Y  "))
+        date_badge.setStyleSheet(
+            "font-size: 12px; font-weight: 600; color: #9499C3; "
+            "background: rgba(148,153,195,0.10); "
+            "border: 1px solid rgba(148,153,195,0.20); "
+            "border-radius: 10px; padding: 4px 10px;"
+        )
+
+        top_bar.addWidget(self._btn_open_sidebar)
+        top_bar.addWidget(self.page_title)
+        top_bar.addStretch()
+        top_bar.addWidget(date_badge)
+        ma_lay.addLayout(top_bar)
+
+        # Pages
+        self.pages = QStackedWidget()
+        self.pages.setStyleSheet("background: transparent;")
+
         self.dashboard_page = DashboardPage(self.settings, self.theme_colors)
         self.dashboard_page.habit_deleted.connect(lambda: self.history_page.load_history())
-        self.stacked_widget.addWidget(self.dashboard_page)
-        
+        self.pages.addWidget(self.dashboard_page)
+
         self.history_page = HistoryPage()
-        self.stacked_widget.addWidget(self.history_page)
+        self.pages.addWidget(self.history_page)
 
         self.settings_page = SettingsPage(self.app, self.settings)
-        self.settings_page.settings_changed.connect(self.on_settings_changed)
-        self.stacked_widget.addWidget(self.settings_page)
+        self.settings_page.settings_changed.connect(self._on_settings_changed)
+        self.pages.addWidget(self.settings_page)
 
-        main_area_layout.addWidget(self.stacked_widget)
+        ma_lay.addWidget(self.pages)
         self.splitter.addWidget(self.main_area)
+        self.splitter.setSizes([272, 1008])
+        root.addWidget(self.splitter)
 
-        self.splitter.setSizes([300, 900])
-        main_layout.addWidget(self.splitter)
-        
-        # Initial data load
+        # Init state
+        self._update_nav(0)
         self.history_page.load_history()
 
-    def update_sidebar_style(self):
-        bg = self.theme_colors.get("bg_card", "#383a59")
-        border = self.theme_colors.get("border", "#6272a4")
-        self.sidebar.setStyleSheet(f"""
-            QFrame#Sidebar {{
-                background-color: {bg};
-                border-right: 1px solid {border};
-            }}
-        """)
-        
-        if hasattr(self, 'btn_toggle_sidebar'):
-            bg_input = self.theme_colors.get("bg_input", "#44475a")
-            text_main = self.theme_colors.get("text_main", "#f8f8f2")
-            self.btn_toggle_sidebar.setStyleSheet(f"""
-                QPushButton#ToggleSidebar {{
-                    background-color: transparent;
-                    color: {text_main};
-                    font-size: 20px;
-                    border: none;
-                    border-radius: 5px;
-                }}
-                QPushButton#ToggleSidebar:hover {{
-                    background-color: {bg_input};
-                }}
-            """)
+    # ── helpers ────────────────────────────────────────────────────────────
 
-    def update_nav_buttons_style(self):
-        for btn in [self.btn_dashboard, self.btn_history, self.btn_settings]:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    text-align: left;
-                    padding: 10px;
-                    background-color: transparent;
-                    border: none;
-                    border-radius: 5px;
-                }}
-                QPushButton:hover {{
-                    background-color: {self.theme_colors.get('bg_input')};
-                }}
-            """)
+    def _update_nav(self, active_idx: int):
+        accent    = self.theme_colors.get("accent",    "#BD93F9")
+        text_main = self.theme_colors.get("text_main", "#F8F8F2")
+        for i, btn in enumerate(self._nav_btns):
+            btn.set_active(i == active_idx, accent, text_main)
 
-    def toggle_sidebar(self):
+    def _toggle_sidebar(self):
         if self.sidebar.isVisible():
             self.sidebar.hide()
+            self._btn_open_sidebar.show()
         else:
             self.sidebar.show()
+            self._btn_open_sidebar.hide()
 
-    def switch_page(self, index):
-        self.stacked_widget.setCurrentIndex(index)
-        if index == 1:
+    def _switch_page(self, idx: int):
+        self.pages.setCurrentIndex(idx)
+        self.page_title.setText(["Dashboard", "History", "Settings"][idx])
+        self._update_nav(idx)
+        if idx == 1:
             self.history_page.load_history()
 
-    def on_settings_changed(self, settings, theme_colors):
-        self.settings = settings
+    def _on_settings_changed(self, settings, theme_colors):
+        self.settings     = settings
         self.theme_colors = theme_colors
-        self.update_sidebar_style()
-        self.update_nav_buttons_style()
-        self.dashboard_page.update_theme(settings, theme_colors)
-
-    def on_habit_added(self, name, h_type, total_target, daily_target):
-        now = datetime.now()
-        month = self.dashboard_page.month
-        year = self.dashboard_page.year
+        self._update_nav(self.pages.currentIndex())
         
-        if month == now.month and year == now.year:
-            created_day = now.day
-        elif (year > now.year) or (year == now.year and month > now.month):
-            created_day = 1
-        else:
-            created_day = 31
-            
-        add_habit(name, month, year, h_type, total_target, daily_target, created_day)
+        # Trigger full reload of dashboard habits
+        self.dashboard_page.update_theme(settings, theme_colors)
+        self.dashboard_page.reload()
+        
+        # Trigger reload of history
+        self.history_page.load_history()
+
+
+    def _on_habit_added(self, name: str, h_type: str, total_target: int, daily_target: int):
+        add_habit(name, h_type, total_target, daily_target)
         self.dashboard_page.reload()
         self.history_page.load_history()

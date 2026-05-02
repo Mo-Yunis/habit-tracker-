@@ -1,4 +1,7 @@
 {
-    "theme": "Dark",
-    "graph_type": "Vertical Bar"
+    "theme": "Dracula",
+    "graph_type": "Horizontal Bar",
+    "start_of_week": "Saturday",
+    "show_streaks": true,
+    "compact_mode": false
 }

@@ -1,255 +1,330 @@
 from PyQt5.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QProgressBar, 
-    QPushButton, QVBoxLayout, QFrame, QGridLayout
+    QWidget, QHBoxLayout, QLabel, QProgressBar,
+    QPushButton, QVBoxLayout, QFrame, QGridLayout, QSizePolicy
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, pyqtSignal, QPropertyAnimation, QEasingCurve, QTimer
 from PyQt5.QtWidgets import QGraphicsOpacityEffect, QGraphicsDropShadowEffect
 from PyQt5.QtGui import QColor, QMouseEvent
 
 from core.database import update_progress, delete_habit, get_stats
 
+
+# ── CheckCircle ────────────────────────────────────────────────────────────
+
 class CheckCircle(QFrame):
     toggled = pyqtSignal(bool)
-    
-    def __init__(self, checked=False, is_past=False, is_locked=False, is_pre_creation=False):
+
+    def __init__(self, checked=False, is_past=False, is_locked=False,
+                 is_pre_creation=False, accent="#BD93F9"):
         super().__init__()
-        self.setFixedSize(14, 14)
-        self.checked = checked
-        self.is_past = is_past
-        self.is_locked = is_locked
+        self.setFixedSize(22, 22)
+        self.checked        = checked
+        self.is_past        = is_past
+        self.is_locked      = is_locked
         self.is_pre_creation = is_pre_creation
-        self.update_style()
-        
-    def update_style(self):
+        self.accent         = accent
+        self._apply_style()
+
+    def _apply_style(self):
         if self.checked:
-            bg = "#50fa7b"
-            border = "#50fa7b"
+            bg     = "#50FA7B"
+            border = "#50FA7B"
+        elif self.is_pre_creation:
+            bg     = "rgba(80,80,120,0.22)"
+            border = "transparent"
+        elif self.is_past:
+            bg     = "rgba(255,85,85,0.45)"
+            border = "#FF5555"
         else:
-            if self.is_pre_creation:
-                bg = "#383a59"
-                border = "#44475a"
-            elif self.is_past:
-                bg = "#ff5555"
-                border = "#ff5555"
-            else:
-                bg = "#282a36"
-                border = "#6272a4"
-            
+            bg     = "transparent"
+            border = "rgba(148,153,195,0.55)"
+
+        hover = "" if (self.is_pre_creation or self.is_past or self.is_locked) else (
+            f"QFrame:hover {{ border: 2px solid {self.accent}; }}"
+        )
+
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {bg};
-                border: 1px solid {border};
-                border-radius: 7px;
+                border: 2px solid {border};
+                border-radius: 11px;
             }}
-            QFrame:hover {{
-                border: 1px solid #bd93f9;
-            }}
+            {hover}
         """)
 
     def mousePressEvent(self, event: QMouseEvent):
-        if self.is_pre_creation:
+        if self.is_pre_creation or self.is_past:
             return
-            
-        if self.is_past:
-            return
-            
         if self.is_locked and not self.checked:
             return
-            
         if event.button() == Qt.LeftButton:
             self.checked = not self.checked
-            self.update_style()
+            self._apply_style()
             self.toggled.emit(self.checked)
 
 
-class DayWidget(QFrame):
-    clicked = pyqtSignal(int, int) # day, new_value
+# ── DayWidget ──────────────────────────────────────────────────────────────
 
-    def __init__(self, day, current_val, target_val, is_past=False, is_locked=False, is_pre_creation=False):
+class DayWidget(QFrame):
+    clicked = pyqtSignal(str, int)   # log_date, new_val
+
+    def __init__(self, day, log_date, current_val, target_val,
+                 is_past=False, is_locked=False, is_pre_creation=False,
+                 accent="#BD93F9"):
         super().__init__()
-        self.day = day
-        self.val = current_val
-        self.target = target_val
-        self.is_past = is_past
-        self.is_locked = is_locked
+        self.day            = day
+        self.log_date       = log_date
+        self.val            = current_val
+        self.target         = target_val
+        self.is_past        = is_past
+        self.is_locked      = is_locked
         self.is_pre_creation = is_pre_creation
-        
-        self.setStyleSheet("""
-            QFrame {
-                background-color: #44475a;
-                border-radius: 6px;
-            }
-        """)
-        
+        self.accent         = accent
+
+        self.setObjectName("DayCard")
+
+        # Dimmed style for pre-creation days
+        if is_pre_creation:
+            self.setStyleSheet("""
+                QFrame#DayCard {
+                    background-color: rgba(50,50,80,0.30);
+                    border-radius: 12px;
+                    border: 1px solid rgba(100,100,140,0.15);
+                }
+            """)
+        else:
+            hover_border = "rgba(255,85,85,0.55)" if is_past else accent
+            self.setStyleSheet(f"""
+                QFrame#DayCard {{
+                    background-color: rgba(40,40,70,0.55);
+                    border-radius: 12px;
+                    border: 1px solid rgba(148,153,195,0.18);
+                }}
+                QFrame#DayCard:hover {{
+                    background-color: rgba(60,60,95,0.75);
+                    border: 1px solid {hover_border};
+                }}
+            """)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(4)
-        
+        layout.setContentsMargins(7, 7, 7, 7)
+        layout.setSpacing(5)
+
+        # Day number label
+        day_color = "#555577" if is_pre_creation else (
+            "#FF7070" if is_past else "#F8F8F2"
+        )
         lbl = QLabel(str(day))
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet("color: #f8f8f2; font-size: 10px; font-weight: bold;")
+        lbl.setStyleSheet(
+            f"color: {day_color}; font-size: 11px; font-weight: 800; background: transparent;"
+        )
         layout.addWidget(lbl)
-        
-        # Add checks
+
+        # Checkboxes
         self.checks = []
         checks_layout = QHBoxLayout()
         checks_layout.setContentsMargins(0, 0, 0, 0)
-        checks_layout.setSpacing(2)
-        
+        checks_layout.setSpacing(4)
+        checks_layout.setAlignment(Qt.AlignCenter)
+
         for i in range(self.target):
-            c = CheckCircle(checked=(i < self.val), is_past=self.is_past, is_locked=self.is_locked, is_pre_creation=self.is_pre_creation)
-            c.toggled.connect(self.on_check_toggled)
+            c = CheckCircle(
+                checked=(i < self.val),
+                is_past=self.is_past,
+                is_locked=self.is_locked,
+                is_pre_creation=self.is_pre_creation,
+                accent=self.accent
+            )
+            c.toggled.connect(self._on_check_toggled)
             checks_layout.addWidget(c)
             self.checks.append(c)
-            
-        checks_layout.addStretch()
-        layout.addLayout(checks_layout)
-        
-    def on_check_toggled(self, state):
-        # Recalculate val
-        self.val = sum(1 for c in self.checks if c.checked)
-        self.clicked.emit(self.day, self.val)
 
+        layout.addLayout(checks_layout)
+
+    def _on_check_toggled(self, _):
+        self.val = sum(1 for c in self.checks if c.checked)
+        self.clicked.emit(self.log_date, self.val)
+
+
+# ── HabitRow ───────────────────────────────────────────────────────────────
 
 class HabitRow(QFrame):
-    data_changed = pyqtSignal()
+    data_changed  = pyqtSignal()
     habit_deleted = pyqtSignal()
 
     def __init__(self, habit, view_mode="Month"):
         super().__init__()
-        self.habit = habit
+        self.habit     = habit
         self.view_mode = view_mode
+        self.setObjectName("Card")
 
-        self.setStyleSheet("""
-        HabitRow {
-            background-color: #383a59;
-            border-radius: 12px;
-        }
-        """)
-
-        # Shadow
+        # Lightweight shadow (reduced blur for performance)
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(15)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 100))
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(0, 0, 0, 55))
         self.setGraphicsEffect(shadow)
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(15, 15, 15, 15)
+        # Cache stats once (avoids duplicate DB hit inside __init__)
+        self._percent, self._streak, self._total_reps = get_stats(habit)
+        is_completed = (self._percent >= 100)
+        accent = habit.get("accent", "#BD93F9")
 
-        # --- HEADER ---
+        root = QVBoxLayout(self)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(10)
+
+        # ── HEADER ────────────────────────────────────────────────────────
         top = QHBoxLayout()
 
-        title_text = f"{habit['name']} "
-        if habit["type"] == "daily":
-            title_text += f"<span style='color:#6272a4; font-size:12px;'>(Daily Goal: {habit['daily_target']})</span>"
-        else:
-            title_text += f"<span style='color:#6272a4; font-size:12px;'>(Monthly Target: {habit['total_target']} | Daily ~{habit['daily_target']})</span>"
+        name_lbl = QLabel(habit["name"])
+        name_lbl.setStyleSheet(
+            "font-size: 20px; font-weight: 800; color: #F8F8F2; background: transparent;"
+        )
 
-        self.name_lbl = QLabel(title_text)
-        self.name_lbl.setTextFormat(Qt.RichText)
-        self.name_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #f8f8f2;")
+        sub_text = (
+            f"Daily Goal: {habit['daily_target']}" if habit["type"] == "daily"
+            else f"Target: {habit['total_target']} Reps"
+        )
+        sub_lbl = QLabel(sub_text)
+        sub_lbl.setStyleSheet(
+            "font-size: 12px; color: #9499C3; font-weight: 500; background: transparent;"
+        )
 
-        self.delete_btn = QPushButton("✕")
-        self.delete_btn.setFixedSize(30, 30)
-        self.delete_btn.setStyleSheet("""
-            QPushButton { background-color: #ff5555; border-radius: 15px; color: white; border: none; font-weight: bold;}
-            QPushButton:hover { background-color: #ff6e6e; }
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(30, 30)
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255,85,85,0.10);
+                border-radius: 15px;
+                color: #FF5555;
+                border: 1px solid rgba(255,85,85,0.28);
+                font-weight: 900; font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #FF5555;
+                color: white;
+            }
         """)
-        self.delete_btn.clicked.connect(self.delete)
+        del_btn.clicked.connect(self._delete)
 
-        top.addWidget(self.name_lbl)
+        hdr_col = QVBoxLayout()
+        hdr_col.setSpacing(2)
+        hdr_col.addWidget(name_lbl)
+        hdr_col.addWidget(sub_lbl)
+
+        top.addLayout(hdr_col)
         top.addStretch()
-        top.addWidget(self.delete_btn)
+        top.addWidget(del_btn)
+        root.addLayout(top)
 
-        self.layout.addLayout(top)
+        # ── STATS + PROGRESS ──────────────────────────────────────────────
+        self.stats_lbl = QLabel()
+        self.stats_lbl.setStyleSheet(
+            "font-size: 11px; color: #BD93F9; font-weight: 700; "
+            "margin-bottom: -4px; background: transparent;"
+        )
+        root.addWidget(self.stats_lbl)
 
-        # --- PROGRESS BAR ---
         self.progress = QProgressBar()
-        self.progress.setFixedHeight(12)
-        self.layout.addWidget(self.progress)
+        self.progress.setFixedHeight(10)
+        self.progress.setTextVisible(False)
+        root.addWidget(self.progress)
 
-        # --- DAYS GRID ---
-        days_layout = QGridLayout()
-        days_layout.setSpacing(6)
-        
+        root.addSpacing(8)
+
+        # ── DAYS GRID ─────────────────────────────────────────────────────
+        days_container = QWidget()
+        days_container.setStyleSheet("background: transparent;")
+        days_layout = QGridLayout(days_container)
+        days_layout.setContentsMargins(0, 0, 0, 0)
+        days_layout.setSpacing(8)
+
         from datetime import datetime
-        now = datetime.now()
-        is_past_month = (habit["year"] < now.year) or (habit["year"] == now.year and habit["month"] < now.month)
-        is_current_month = (habit["year"] == now.year and habit["month"] == now.month)
-        current_day = now.day
-        
-        percent, _, _ = get_stats(habit)
-        is_completed = (percent >= 100)
-        
-        row = 0
-        col = 0
-        for day, val in habit["logs"]:
-            if self.view_mode == "Today" and (not is_current_month or day != current_day):
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        habit_start = habit.get("start_date", "")
+
+        row_i = 0
+        col_i = 0
+        for day, val, log_date in habit["logs"]:
+            if self.view_mode == "Today" and log_date != today_str:
                 continue
-                
-            is_past = is_past_month or (is_current_month and day < current_day)
-            is_pre_creation = (day < habit.get("created_day", 1))
-            
-            dw = DayWidget(day, val, habit["daily_target"], is_past=is_past, is_locked=is_completed, is_pre_creation=is_pre_creation)
-            dw.clicked.connect(self.on_day_clicked)
-            days_layout.addWidget(dw, row, col)
-            col += 1
-            if col > 7: # 8 items per row to make space for wider day widgets
-                col = 0
-                row += 1
 
-        self.layout.addLayout(days_layout)
+            is_pre_creation = bool(habit_start and log_date < habit_start)
+            is_past         = (not is_pre_creation) and (log_date < today_str)
 
-        # FADE IN
-        self.opacity = QGraphicsOpacityEffect()
-        self.setGraphicsEffect(self.opacity)
+            dw = DayWidget(
+                day, log_date, val, habit["daily_target"],
+                is_past=is_past,
+                is_locked=is_completed,
+                is_pre_creation=is_pre_creation,
+                accent=accent
+            )
+            dw.clicked.connect(self._on_day_clicked)
+            days_layout.addWidget(dw, row_i, col_i)
+            col_i += 1
+            if col_i > 7:
+                col_i = 0
+                row_i += 1
 
-        self.fade = QPropertyAnimation(self.opacity, b"opacity")
-        self.fade.setDuration(500)
-        self.fade.setStartValue(0)
-        self.fade.setEndValue(1)
-        self.fade.start()
+        root.addWidget(days_container)
 
-        self.update_progress_bar()
+        # ── FADE IN ───────────────────────────────────────────────────────
+        eff = QGraphicsOpacityEffect()
+        self.setGraphicsEffect(eff)
+        self._fade = QPropertyAnimation(eff, b"opacity")
+        self._fade.setDuration(380)
+        self._fade.setStartValue(0.0)
+        self._fade.setEndValue(1.0)
+        self._fade.setEasingCurve(QEasingCurve.OutCubic)
+        self._fade.start()
 
-    def on_day_clicked(self, day, new_val):
-        update_progress(self.habit["id"], day, new_val)
-        
-        # Update local logs so we don't have to fetch from DB immediately
-        for i, (d, v) in enumerate(self.habit["logs"]):
-            if d == day:
-                self.habit["logs"][i] = (d, new_val)
+        self._update_progress_bar()
+
+    # ── slots ──────────────────────────────────────────────────────────────
+
+    def _on_day_clicked(self, log_date: str, new_val: int):
+        update_progress(self.habit["id"], log_date, new_val)
+        for i, (d, v, ld) in enumerate(self.habit["logs"]):
+            if ld == log_date:
+                self.habit["logs"][i] = (d, new_val, ld)
                 break
-                
-        self.update_progress_bar()
+        self._update_progress_bar()
         self.data_changed.emit()
 
-    def update_progress_bar(self):
+    def _update_progress_bar(self):
         percent, streak, total_reps = get_stats(self.habit)
-        
-        self.anim = QPropertyAnimation(self.progress, b"value")
-        self.anim.setDuration(600)
-        self.anim.setStartValue(self.progress.value())
-        self.anim.setEndValue(percent)
-        self.anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.anim.start()
-        
-        self.progress.setFormat(f"{percent}% |  Streak: {streak} |  Reps: {total_reps}")
+        self._percent    = percent
+        self._streak     = streak
+        self._total_reps = total_reps
+
+        self._anim = QPropertyAnimation(self.progress, b"value")
+        self._anim.setDuration(700)
+        self._anim.setStartValue(self.progress.value())
+        self._anim.setEndValue(percent)
+        self._anim.setEasingCurve(QEasingCurve.OutExpo)
+        self._anim.start()
+
+        self.stats_lbl.setText(
+            f"{percent}% Complete  •  🔥 {streak}-day streak  •  Total: {total_reps}"
+        )
         self.progress.setStyleSheet("""
             QProgressBar {
-                background-color: #282a36;
-                border-radius: 6px;
-                text-align: center;
-                color: #f8f8f2;
-                font-weight: bold;
+                background-color: rgba(50,50,90,0.50);
+                border-radius: 5px;
+                border: none;
             }
             QProgressBar::chunk {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #bd93f9, stop:1 #ff79c6);
-                border-radius: 6px;
+                background-color: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #BD93F9, stop:1 #FF79C6
+                );
+                border-radius: 5px;
             }
         """)
 
-    def delete(self):
+    def _delete(self):
         delete_habit(self.habit["id"])
         self.habit_deleted.emit()
