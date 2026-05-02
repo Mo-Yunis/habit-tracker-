@@ -1,9 +1,22 @@
 # 🔥 Premium Habit Tracker
 
+[![Build Binaries](https://github.com/Mo-Yunis/habit-tracker-/actions/workflows/build.yml/badge.svg)](https://github.com/Mo-Yunis/habit-tracker-/actions/workflows/build.yml)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/Mo-Yunis/habit-tracker-)](https://github.com/Mo-Yunis/habit-tracker-/releases/latest)
+
 ![Dashboard Preview](assets/dashboard_preview.png)
 
+## 📥 Download Latest Version
+Get the ready-to-use application for your system:
+- **🪟 Windows (.exe)**: [Download here](https://github.com/Mo-Yunis/habit-tracker-/releases/latest)
+- **🐧 Linux (Binary)**: [Download here](https://github.com/Mo-Yunis/habit-tracker-/releases/latest)
+
+> No installation required! Just download and run.
+
+---
+
 ## 🌟 Overview
-**Habit Tracker** is a sleek, modern, and powerful desktop application designed to help you stay on top of your daily routines and long-term goals. Built with **Python** and **PyQt5**, it features a beautiful **Dracula-themed** interface that makes tracking habits an enjoyable experience.
+**Habit Tracker** is a sleek, modern, and powerful desktop application designed to help you stay on top of your daily routines and long-term goals. Built with **Python** and **PyQt5**, it features a beautiful **Liquid Glass** interface that makes tracking habits an enjoyable experience.
+
 
 Whether you're looking to build new habits or break old ones, this tool provides the analytics and visual feedback you need to stay motivated.
 
