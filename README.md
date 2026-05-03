@@ -15,7 +15,7 @@ Get the ready-to-use application for your system:
 ---
 
 ## 🎬 Demo
-<video src="assets/demo_fast.mp4" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/61ce6772-8395-4d4c-a2e5-78afdcc6f177" controls width="100%"></video>
 
 ---
 
